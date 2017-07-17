@@ -27,7 +27,7 @@ class TextLoader():
 
     def preprocess(self, input_file, vocab_file, tensor_file):
         with codecs.open(input_file, "r", encoding=self.encoding) as f:
-            data = f.read()
+            data = [l.strip() for l in f.readlines()]
         counter = collections.Counter(data)
         count_pairs = sorted(counter.items(), key=lambda x: -x[1])
         self.chars, _ = zip(*count_pairs)

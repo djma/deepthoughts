@@ -4,10 +4,40 @@ import tensorflow as tf
 import argparse
 import time
 import os
+import numpy as np
 from six.moves import cPickle
 
 from utils import TextLoader
 from model import Model
+
+def load_embedding_vectors_word2vec(vocabulary):
+  with open("../data/GoogleNews-vectors-negative300.bin", "rb") as emb:
+    header = emb.readline()
+    vocab_size, vector_size = map(int, header.split())
+
+    vocab_to_idx = vocabulary
+
+    embedding_vectors = np.random.uniform(-0.25, 0.25, (len(vocabulary), vector_size))
+#0.25
+
+    binary_len = np.dtype('float32').itemsize * vector_size
+    for line_no in range(vocab_size):
+        word = []
+        while True:
+            ch = emb.read(1)
+            if ch == b' ':
+                break
+            if ch == b'':
+                raise EOFError("unexpected end of input; is count incorrect or file otherwise damaged?")
+            if ch != b'\n':
+                word.append(ch)
+        word = str(b''.join(word), encoding='utf-8', errors='strict')
+        idx = vocab_to_idx.get(word)
+        if idx != None:
+            embedding_vectors[idx] = np.fromstring(emb.read(binary_len), dtype='float32')
+        else:
+            emb.seek(binary_len, 1)
+    return embedding_vectors
 
 
 def main():
@@ -19,7 +49,7 @@ def main():
                         help='directory to store checkpointed models')
     parser.add_argument('--log_dir', type=str, default='logs',
                         help='directory to store tensorboard logs')
-    parser.add_argument('--rnn_size', type=int, default=128,
+    parser.add_argument('--rnn_size', type=int, default=300,
                         help='size of RNN hidden state')
     parser.add_argument('--num_layers', type=int, default=2,
                         help='number of layers in the RNN')
@@ -27,7 +57,7 @@ def main():
                         help='rnn, gru, lstm, or nas')
     parser.add_argument('--batch_size', type=int, default=50,
                         help='minibatch size')
-    parser.add_argument('--seq_length', type=int, default=50,
+    parser.add_argument('--seq_length', type=int, default=10,
                         help='RNN sequence length')
     parser.add_argument('--num_epochs', type=int, default=50,
                         help='number of epochs')
@@ -90,6 +120,9 @@ def train(args):
         cPickle.dump((data_loader.chars, data_loader.vocab), f)
 
     model = Model(args)
+
+    # Load word2vec embedding
+    model.embedding.assign(load_embedding_vectors_word2vec(data_loader.vocab))
 
     with tf.Session() as sess:
         # instrument for tensorboard

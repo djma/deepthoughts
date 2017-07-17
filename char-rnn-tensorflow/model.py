@@ -45,8 +45,8 @@ class Model():
                                         [args.rnn_size, args.vocab_size])
             softmax_b = tf.get_variable("softmax_b", [args.vocab_size])
 
-        embedding = tf.get_variable("embedding", [args.vocab_size, args.rnn_size])
-        inputs = tf.nn.embedding_lookup(embedding, self.input_data)
+        self.embedding = tf.get_variable("embedding", [args.vocab_size, args.rnn_size])
+        inputs = tf.nn.embedding_lookup(self.embedding, self.input_data)
 
         # dropout beta testing: double check which one should affect next line
         if training and args.output_keep_prob:
@@ -58,7 +58,7 @@ class Model():
         def loop(prev, _):
             prev = tf.matmul(prev, softmax_w) + softmax_b
             prev_symbol = tf.stop_gradient(tf.argmax(prev, 1))
-            return tf.nn.embedding_lookup(embedding, prev_symbol)
+            return tf.nn.embedding_lookup(self.embedding, prev_symbol)
 
         outputs, last_state = legacy_seq2seq.rnn_decoder(inputs, self.initial_state, cell, loop_function=loop if not training else None, scope='rnnlm')
         output = tf.reshape(tf.concat(outputs, 1), [-1, args.rnn_size])
@@ -87,9 +87,9 @@ class Model():
         tf.summary.histogram('loss', loss)
         tf.summary.scalar('train_loss', self.cost)
 
-    def sample(self, sess, chars, vocab, num=200, prime='The ', sampling_type=1):
+    def sample(self, sess, chars, vocab, num=200, prime='endofparagraph', sampling_type=1):
         state = sess.run(self.cell.zero_state(1, tf.float32))
-        for char in prime[:-1]:
+        for char in prime.split(" "):
             x = np.zeros((1, 1))
             x[0, 0] = vocab[char]
             feed = {self.input_data: x, self.initial_state: state}
@@ -100,8 +100,8 @@ class Model():
             s = np.sum(weights)
             return(int(np.searchsorted(t, np.random.rand(1)*s)))
 
-        ret = prime
-        char = prime[-1]
+        ret = "\n" if prime == 'endofparagraph' else prime.title()
+        char = prime.split(" ")[-1]
         for n in range(num):
             x = np.zeros((1, 1))
             x[0, 0] = vocab[char]
@@ -120,6 +120,22 @@ class Model():
                 sample = weighted_pick(p)
 
             pred = chars[sample]
-            ret += pred
+
+            # Prettify
+            if pred in [".", ",", ")", "?", ":", ";"] or ret[-1] == "(":
+              ret += pred
+            elif pred == "i":
+              ret += " " + pred.title()
+            elif pred == "\'":
+              ret += "'"
+            elif pred == "endofparagraph":
+              ret += "\n\n"
+            else:
+              if ret[-1] == ".":
+                ret += " " + pred.title()
+              elif ret[-1] == "\n":
+                ret += pred.title()
+              else:
+                ret += " " + pred
             char = pred
         return ret
